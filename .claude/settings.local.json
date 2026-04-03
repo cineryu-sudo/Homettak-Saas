@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(\"/mnt/c/Program Files/nodejs/node\":*)",
+      "Bash(export:*)"
+    ]
+  }
+}
