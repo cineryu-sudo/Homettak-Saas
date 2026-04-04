@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { orders as initialOrders, technicians as initialTechnicians } from "@/data/mock";
 import { Order, Technician } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
@@ -63,6 +64,7 @@ function getDateRangeLabel(viewMode: CalendarViewMode, dates: Date[]) {
 }
 
 export default function SchedulePage() {
+  const router = useRouter();
   const [orders, setOrders] = usePersistentState<Order[]>(
     STORAGE_KEYS.orders,
     initialOrders,
@@ -71,7 +73,7 @@ export default function SchedulePage() {
     STORAGE_KEYS.technicians,
     initialTechnicians,
   );
-  const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTech, setSelectedTech] = useState<string | null>(null);
   const [quickAssign, setQuickAssign] = useState<Record<string, { techId: string; date: string }>>({});
@@ -97,7 +99,7 @@ export default function SchedulePage() {
   const scheduledOrders = orders.filter((o) => o.scheduledDate && o.technicianId);
 
   const unassignedOrders = orders.filter(
-    (o) => !o.technicianId && (o.status === "접수" || o.status === "배정완료"),
+    (o) => !o.technicianId && o.status !== "완료" && o.status !== "취소",
   );
 
   const visibleDateSet = useMemo(
@@ -386,13 +388,17 @@ export default function SchedulePage() {
                         return (
                           <div
                             key={order.id}
-                            className={`p-2 rounded-lg text-[11px] border-l-[3px] ${color.bg} ${color.border} hover:shadow-sm transition-all cursor-default group`}
+                            onDoubleClick={() => router.push(`/orders/${order.id}`)}
+                            title="더블클릭하여 상세 보기"
+                            className={`p-2 rounded-lg text-[11px] border-l-[3px] ${color.bg} ${color.border} hover:shadow-sm transition-all cursor-pointer group`}
                           >
                             <div className="flex justify-between items-start">
                               <span className={`font-semibold ${color.text}`}>{order.customerName}</span>
                               <StatusBadge status={order.status} />
                             </div>
-                            <p className="text-[var(--color-text-muted)] mt-0.5 truncate">{order.sinkType}</p>
+                            <p className="text-[var(--color-text-muted)] mt-0.5 truncate">
+                              {order.productName?.trim() || order.sinkType}
+                            </p>
                             {tech && (
                               <p className="text-[var(--color-text-muted)] mt-0.5 flex items-center gap-1">
                                 <span className={`inline-block h-1.5 w-1.5 rounded-full ${color.dot}`} />
@@ -444,7 +450,7 @@ export default function SchedulePage() {
                       <StatusBadge status={order.status} />
                     </div>
                     <p className="text-[10px] text-[var(--color-text-muted)] mt-1 truncate">
-                      {order.sinkType} · {order.address.split(" ").slice(0, 2).join(" ")}
+                      {(order.productName?.trim() || order.sinkType)} · {order.address.split(" ").slice(0, 2).join(" ")}
                     </p>
                     <p className="text-[10px] font-medium text-amber-600 mt-1">{order.price.toLocaleString()}원</p>
 

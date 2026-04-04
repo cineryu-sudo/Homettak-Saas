@@ -52,8 +52,8 @@ export default function Sidebar() {
         {/* 로고 */}
         <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid var(--sidebar-border)" }}>
           <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">
-              HomeTTak
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              홈앤뚝딱
             </h1>
             <p className="mt-0.5 text-[11px]" style={{ color: "var(--sidebar-text)" }}>
               홈서비스 운영 자동화

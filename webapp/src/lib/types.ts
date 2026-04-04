@@ -1,4 +1,13 @@
-export type OrderStatus = "접수" | "배정완료" | "시공중" | "완료" | "취소";
+export const DEFAULT_ORDER_STATUSES = [
+  "접수",
+  "배정완료",
+  "시공중",
+  "완료",
+  "취소",
+] as const;
+
+export type DefaultOrderStatus = (typeof DEFAULT_ORDER_STATUSES)[number];
+export type OrderStatus = string;
 
 export type SinkType =
   | "언더싱크볼"
@@ -13,6 +22,7 @@ export interface Order {
   phone: string;
   address: string;
   productName?: string;
+  isDepositPaid?: boolean;
   sinkType: SinkType;
   status: OrderStatus;
   requestDate: string;

@@ -1,4 +1,9 @@
 import { Order, Technician, ScheduleEvent } from "@/lib/types";
+import { findProductByName } from "@/data/product-catalog";
+
+function priceOf(productName: string, fallback: number) {
+  return findProductByName(productName)?.price ?? fallback;
+}
 
 export const technicians: Technician[] = [
   {
@@ -59,6 +64,7 @@ export const orders: Order[] = [
     customerName: "홍길동",
     phone: "010-1111-2222",
     address: "서울시 강남구 역삼동 123-45 래미안 아파트 102동 1503호",
+    productName: "백조 콰이어트 860",
     sinkType: "언더싱크볼",
     status: "접수",
     requestDate: "2026-02-25",
@@ -66,13 +72,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: null,
     notes: "주방 싱크볼 교체 요청. 기존 싱크볼 녹이 심함",
-    price: 350000,
+    price: priceOf("백조 콰이어트 860", 255000),
   },
   {
     id: "ORD-2026-002",
     customerName: "김영희",
     phone: "010-3333-4444",
     address: "서울시 송파구 잠실동 67-8 잠실엘스 305동 801호",
+    productName: "OKEE 벨라고 ESQL858",
     sinkType: "오버싱크볼",
     status: "배정완료",
     requestDate: "2026-02-24",
@@ -80,13 +87,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: "tech-2",
     notes: "오전 시공 희망",
-    price: 280000,
+    price: priceOf("OKEE 벨라고 ESQL858", 330000),
   },
   {
     id: "ORD-2026-003",
     customerName: "이철수",
     phone: "010-5555-6666",
     address: "서울시 마포구 상암동 12-3 DMC 래미안 101동 202호",
+    productName: "아티잔 PEDU900",
     sinkType: "일체형싱크볼",
     status: "시공중",
     requestDate: "2026-02-23",
@@ -94,13 +102,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: "tech-3",
     notes: "배수구 교체도 함께 요청",
-    price: 420000,
+    price: priceOf("아티잔 PEDU900", 407000),
   },
   {
     id: "ORD-2026-004",
     customerName: "박미영",
     phone: "010-7777-8888",
     address: "경기도 성남시 분당구 정자동 45-6 파크뷰 아파트 201동 1102호",
+    productName: "리젠스 GQEN9403",
     sinkType: "사각싱크볼",
     status: "완료",
     requestDate: "2026-02-20",
@@ -108,13 +117,14 @@ export const orders: Order[] = [
     completedDate: "2026-02-22",
     technicianId: "tech-4",
     notes: "",
-    price: 310000,
+    price: priceOf("리젠스 GQEN9403", 340000),
   },
   {
     id: "ORD-2026-005",
     customerName: "최동훈",
     phone: "010-9999-0000",
     address: "서울시 강남구 대치동 89-1 은마아파트 7동 405호",
+    productName: "고니 9530",
     sinkType: "원형싱크볼",
     status: "접수",
     requestDate: "2026-02-26",
@@ -122,13 +132,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: null,
     notes: "이번 주 내 시공 가능한지 확인 요청",
-    price: 290000,
+    price: priceOf("고니 9530", 260000),
   },
   {
     id: "ORD-2026-006",
     customerName: "강지수",
     phone: "010-1212-3434",
     address: "경기도 수원시 영통구 매탄동 56-7 삼성래미안 102동 903호",
+    productName: "백조 깜뽀 860",
     sinkType: "언더싱크볼",
     status: "배정완료",
     requestDate: "2026-02-25",
@@ -136,13 +147,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: "tech-5",
     notes: "오후 2시 이후 희망",
-    price: 350000,
+    price: priceOf("백조 깜뽀 860", 370000),
   },
   {
     id: "ORD-2026-007",
     customerName: "윤서아",
     phone: "010-5656-7878",
     address: "서울시 용산구 이태원동 34-5 한남더힐 B동 1201호",
+    productName: "심리스 아티잔 ESD 858",
     sinkType: "일체형싱크볼",
     status: "시공중",
     requestDate: "2026-02-22",
@@ -150,13 +162,14 @@ export const orders: Order[] = [
     completedDate: null,
     technicianId: "tech-1",
     notes: "수전 교체도 함께 진행",
-    price: 480000,
+    price: priceOf("심리스 아티잔 ESD 858", 473000),
   },
   {
     id: "ORD-2026-008",
     customerName: "장민호",
     phone: "010-9090-1010",
     address: "서울시 강동구 천호동 23-4 래미안솔베뉴 108동 304호",
+    productName: "아티잔 네오녹스 RT882",
     sinkType: "오버싱크볼",
     status: "완료",
     requestDate: "2026-02-18",
@@ -164,7 +177,7 @@ export const orders: Order[] = [
     completedDate: "2026-02-21",
     technicianId: "tech-2",
     notes: "",
-    price: 280000,
+    price: priceOf("아티잔 네오녹스 RT882", 275000),
   },
 ];
 

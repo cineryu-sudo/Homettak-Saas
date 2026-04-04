@@ -1,9 +1,12 @@
 ﻿"use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { technicians as initialTechs, orders as initialOrders } from "@/data/mock";
 import { Order, Technician } from "@/lib/types";
 import { STORAGE_KEYS, usePersistentState } from "@/lib/persistence";
+
+type ReminderChannel = "kakao" | "sms";
 
 export default function TechniciansPage() {
   const [technicians, setTechnicians] = usePersistentState<Technician[]>(
@@ -12,11 +15,18 @@ export default function TechniciansPage() {
   );
   const [orders] = usePersistentState<Order[]>(STORAGE_KEYS.orders, initialOrders);
   const [showModal, setShowModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
   const [newTech, setNewTech] = useState({
     name: "",
     phone: "",
     region: "",
   });
+  const [selectedReminderTechId, setSelectedReminderTechId] = useState("");
+  const [selectedReminderOrderId, setSelectedReminderOrderId] = useState("");
+  const [selectedReminderChannel, setSelectedReminderChannel] = useState<ReminderChannel>("kakao");
+  const [extraReminderNotes, setExtraReminderNotes] = useState("");
+  const [reminderNotice, setReminderNotice] = useState("");
+  const [reminderNoticeType, setReminderNoticeType] = useState<"success" | "error">("success");
 
   function toggleAvailability(id: string) {
     setTechnicians(
@@ -44,12 +54,106 @@ export default function TechniciansPage() {
     return orders.filter(
       (o) =>
         o.technicianId === techId &&
-        (o.status === "배정완료" || o.status === "시공중"),
+        o.status !== "완료" &&
+        o.status !== "취소",
     );
   }
 
   function getTechCompletedCount(techId: string) {
     return orders.filter((o) => o.technicianId === techId && o.status === "완료").length;
+  }
+
+  function getReminderOrdersByTech(techId: string) {
+    return orders
+      .filter(
+        (o) =>
+          o.technicianId === techId &&
+          !!o.scheduledDate &&
+          o.status !== "완료" &&
+          o.status !== "취소",
+      )
+      .sort((a, b) => (a.scheduledDate || "").localeCompare(b.scheduledDate || ""));
+  }
+
+  function openReminderModal() {
+    const techWithOrders = technicians.find((tech) => getReminderOrdersByTech(tech.id).length > 0);
+    const initialTechId = techWithOrders?.id || technicians[0]?.id || "";
+    const initialOrderId = initialTechId ? getReminderOrdersByTech(initialTechId)[0]?.id || "" : "";
+
+    setSelectedReminderTechId(initialTechId);
+    setSelectedReminderOrderId(initialOrderId);
+    setSelectedReminderChannel("kakao");
+    setExtraReminderNotes("");
+    setReminderNotice("");
+    setReminderNoticeType("success");
+    setShowReminderModal(true);
+  }
+
+  const reminderTech = technicians.find((tech) => tech.id === selectedReminderTechId) || null;
+  const reminderOrders = selectedReminderTechId ? getReminderOrdersByTech(selectedReminderTechId) : [];
+  const reminderOrder = orders.find((order) => order.id === selectedReminderOrderId) || null;
+
+  const reminderMessage = reminderOrder
+    ? [
+        "[기사 일정 리마인드]",
+        `시공 일정: ${[reminderOrder.scheduledDate, reminderOrder.requestedInstallTime].filter(Boolean).join(" ") || "-"}`,
+        `고객명: ${reminderOrder.customerName || "-"}`,
+        `고객주소: ${reminderOrder.address || "-"}`,
+        `제품명: ${reminderOrder.productName?.trim() || reminderOrder.sinkType || "-"}`,
+        `기타 공유 사항: ${extraReminderNotes.trim() || reminderOrder.notes?.trim() || "-"}`,
+      ].join("\n")
+    : "";
+
+  async function handleSendReminder() {
+    if (!reminderTech || !reminderOrder || !reminderMessage) return;
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(reminderMessage);
+      }
+    } catch {
+      // clipboard 복사는 지원되지 않을 수 있어 메시지 발송 동작은 계속 진행
+    }
+
+    if (selectedReminderChannel === "sms") {
+      const smsUrl = `sms:${reminderTech.phone}?body=${encodeURIComponent(reminderMessage)}`;
+      window.location.href = smsUrl;
+      setReminderNoticeType("success");
+      setReminderNotice("리마인드 메시지를 복사했고 문자앱 발송 화면으로 이동했습니다.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/reminders/kakao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          technicianName: reminderTech.name,
+          technicianPhone: reminderTech.phone,
+          scheduleDate: reminderOrder.scheduledDate || "",
+          scheduleTime: reminderOrder.requestedInstallTime || "",
+          customerName: reminderOrder.customerName || "",
+          customerAddress: reminderOrder.address || "",
+          productName: reminderOrder.productName?.trim() || reminderOrder.sinkType || "",
+          sharedNotes: extraReminderNotes.trim() || reminderOrder.notes?.trim() || "",
+          message: reminderMessage,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setReminderNoticeType("error");
+        setReminderNotice(result.error || "카카오톡 리마인드 발송에 실패했습니다.");
+        return;
+      }
+
+      setReminderNoticeType("success");
+      setReminderNotice(result.message || "카카오톡 리마인드를 발송했습니다.");
+    } catch {
+      setReminderNoticeType("error");
+      setReminderNotice("카카오톡 리마인드 발송 중 네트워크 오류가 발생했습니다.");
+    }
   }
 
   return (
@@ -62,12 +166,20 @@ export default function TechniciansPage() {
               총 {technicians.length}명 · 가용 {technicians.filter((t) => t.available).length}명
             </p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--color-primary-dark)] shadow-sm shadow-blue-200 transition-all"
-          >
-            + 기사 등록
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openReminderModal}
+              className="px-4 py-2.5 border border-[var(--color-border)] bg-white rounded-xl text-sm font-semibold hover:bg-slate-50 transition-all"
+            >
+              기사 일정 리마인드
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--color-primary-dark)] shadow-sm shadow-blue-200 transition-all"
+            >
+              + 기사 등록
+            </button>
+          </div>
         </div>
       </div>
 
@@ -98,7 +210,12 @@ export default function TechniciansPage() {
                     {tech.name.charAt(0)}
                   </div>
                   <div>
-                    <p className="font-semibold">{tech.name}</p>
+                    <Link
+                      href={`/technicians/${tech.id}`}
+                      className="font-semibold hover:text-[var(--color-primary)] hover:underline underline-offset-2"
+                    >
+                      {tech.name}
+                    </Link>
                     <p className="text-xs text-[var(--color-text-muted)]">{tech.region}</p>
                   </div>
                 </div>
@@ -136,7 +253,17 @@ export default function TechniciansPage() {
                     {techOrders.map((order) => (
                       <div key={order.id} className="bg-slate-50 rounded-lg p-2 text-xs">
                         <div className="flex justify-between">
-                          <span className="font-medium">{order.customerName}</span>
+                          {order.status === "시공중" ? (
+                            <Link
+                              href={`/orders/${order.id}`}
+                              className="font-medium hover:text-[var(--color-primary)] hover:underline underline-offset-2"
+                              title="주문 상세 보기"
+                            >
+                              {order.customerName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{order.customerName}</span>
+                          )}
                           <span className={order.status === "시공중" ? "text-orange-600" : "text-blue-600"}>
                             {order.status}
                           </span>
@@ -211,6 +338,137 @@ export default function TechniciansPage() {
                 className="px-5 py-2.5 text-sm bg-[var(--color-primary)] text-white rounded-xl hover:bg-[var(--color-primary-dark)] disabled:opacity-40 font-semibold shadow-sm shadow-blue-200 transition-all"
               >
                 등록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReminderModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-[640px] max-h-[90vh] overflow-hidden shadow-2xl animate-fade-in-up">
+            <div className="px-6 py-5 border-b border-[var(--color-border)]">
+              <h3 className="text-lg font-bold">기사 일정 리마인드</h3>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                기사에게 보낼 리마인드 메시지를 확인하고 발송하세요.
+              </p>
+            </div>
+
+            <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">발송 채널</label>
+                  <select
+                    className="w-full border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                    value={selectedReminderChannel}
+                    onChange={(e) => {
+                      setSelectedReminderChannel(e.target.value as ReminderChannel);
+                      setReminderNotice("");
+                    }}
+                  >
+                    <option value="kakao">카카오톡 (알림톡 연동)</option>
+                    <option value="sms">문자 (SMS)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">기사 선택</label>
+                  <select
+                    className="w-full border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                    value={selectedReminderTechId}
+                    onChange={(e) => {
+                      const nextTechId = e.target.value;
+                      const nextOrders = getReminderOrdersByTech(nextTechId);
+                      setSelectedReminderTechId(nextTechId);
+                      setSelectedReminderOrderId(nextOrders[0]?.id || "");
+                      setReminderNotice("");
+                      setReminderNoticeType("success");
+                    }}
+                  >
+                    {technicians.map((tech) => (
+                      <option key={tech.id} value={tech.id}>
+                        {tech.name} ({tech.region})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">시공 일정 선택</label>
+                  <select
+                    className="w-full border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                    value={selectedReminderOrderId}
+                    onChange={(e) => {
+                      setSelectedReminderOrderId(e.target.value);
+                      setReminderNotice("");
+                      setReminderNoticeType("success");
+                    }}
+                    disabled={reminderOrders.length === 0}
+                  >
+                    {reminderOrders.length === 0 ? (
+                      <option value="">발송 가능한 일정이 없습니다</option>
+                    ) : (
+                      reminderOrders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {order.scheduledDate} · {order.customerName} · {order.status}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">기타 공유 사항</label>
+                <textarea
+                  className="w-full border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                  placeholder="예: 현장 주차 불가, 오전 10시 전 연락 필요"
+                  value={extraReminderNotes}
+                  onChange={(e) => {
+                    setExtraReminderNotes(e.target.value);
+                    setReminderNotice("");
+                    setReminderNoticeType("success");
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">리마인드 메시지 미리보기</label>
+                <pre className="bg-slate-50 border border-[var(--color-border)] rounded-xl p-3 text-xs whitespace-pre-wrap leading-relaxed">
+                  {reminderMessage || "발송 가능한 일정이 없습니다."}
+                </pre>
+              </div>
+
+              {reminderNotice && (
+                <div
+                  className={`text-xs rounded-lg p-2.5 border ${
+                    reminderNoticeType === "error"
+                      ? "text-red-700 bg-red-50 border-red-200"
+                      : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                  }`}
+                >
+                  {reminderNotice}
+                </div>
+              )}
+
+              {reminderTech && (
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  발송 대상 연락처: {reminderTech.phone}
+                </p>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[var(--color-border)] bg-slate-50/50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="px-4 py-2.5 text-sm border border-[var(--color-border)] rounded-xl hover:bg-white transition-colors font-medium"
+              >
+                닫기
+              </button>
+              <button
+                onClick={handleSendReminder}
+                disabled={!reminderTech || !reminderOrder || !reminderMessage}
+                className="px-5 py-2.5 text-sm bg-[var(--color-primary)] text-white rounded-xl hover:bg-[var(--color-primary-dark)] disabled:opacity-40 font-semibold shadow-sm shadow-blue-200 transition-all"
+              >
+                {selectedReminderChannel === "kakao" ? "카카오톡 리마인드 발송" : "문자 리마인드 발송"}
               </button>
             </div>
           </div>

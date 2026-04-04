@@ -1,14 +1,23 @@
-import { orders, technicians } from "@/data/mock";
-import StatusBadge from "@/components/StatusBadge";
-import Link from "next/link";
+"use client";
 
-export default async function OrderDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const order = orders.find((o) => o.id === id);
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { orders as initialOrders, technicians as initialTechnicians } from "@/data/mock";
+import StatusBadge from "@/components/StatusBadge";
+import { Order, Technician } from "@/lib/types";
+import { STORAGE_KEYS, usePersistentState } from "@/lib/persistence";
+
+export default function OrderDetailPage() {
+  const params = useParams<{ id: string }>();
+  const orderId = Array.isArray(params.id) ? params.id[0] : params.id;
+
+  const [orders] = usePersistentState<Order[]>(STORAGE_KEYS.orders, initialOrders);
+  const [technicians] = usePersistentState<Technician[]>(
+    STORAGE_KEYS.technicians,
+    initialTechnicians,
+  );
+
+  const order = orders.find((o) => o.id === orderId);
 
   if (!order) {
     return (
@@ -65,7 +74,6 @@ export default async function OrderDetailPage({
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        {/* 주문 정보 */}
         <div className="col-span-2 space-y-5">
           <div className="bg-white rounded-xl border border-[var(--color-border)] p-6">
             <div className="flex justify-between items-start mb-4">
@@ -85,10 +93,12 @@ export default async function OrderDetailPage({
                 <p className="text-[var(--color-text-muted)] mb-1">주소</p>
                 <p className="font-medium">{order.address}</p>
               </div>
+              <div className="col-span-2">
+                <p className="text-[var(--color-text-muted)] mb-1">제품명</p>
+                <p className="font-medium">{order.productName?.trim() || "-"}</p>
+              </div>
               <div>
-                <p className="text-[var(--color-text-muted)] mb-1">
-                  싱크볼 타입
-                </p>
+                <p className="text-[var(--color-text-muted)] mb-1">싱크볼 타입</p>
                 <p className="font-medium">{order.sinkType}</p>
               </div>
               <div>
@@ -106,7 +116,6 @@ export default async function OrderDetailPage({
             </div>
           </div>
 
-          {/* 진행 상태 타임라인 */}
           <div className="bg-white rounded-xl border border-[var(--color-border)] p-6">
             <h3 className="font-semibold mb-4">진행 상태</h3>
             <div className="flex items-center gap-0">
@@ -144,7 +153,6 @@ export default async function OrderDetailPage({
           </div>
         </div>
 
-        {/* 담당 기사 정보 */}
         <div className="space-y-5">
           <div className="bg-white rounded-xl border border-[var(--color-border)] p-6">
             <h3 className="font-semibold mb-4">담당 기사</h3>

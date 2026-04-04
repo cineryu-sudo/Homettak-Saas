@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { orders as initialOrders, technicians as initialTechnicians } from "@/data/mock";
-import { Order, OrderStatus, SinkType, Technician } from "@/lib/types";
+import {
+  DEFAULT_PRODUCT_PRICE,
+  findProductByName,
+  PRODUCT_CATALOG,
+} from "@/data/product-catalog";
+import { DEFAULT_ORDER_STATUSES, Order, OrderStatus, SinkType, Technician } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import { STORAGE_KEYS, usePersistentState } from "@/lib/persistence";
 
@@ -14,6 +19,8 @@ const SINK_TYPES: SinkType[] = [
   "사각싱크볼",
   "원형싱크볼",
 ];
+
+const FALLBACK_PRICE = DEFAULT_PRODUCT_PRICE || 350000;
 
 export default function OrdersPage() {
   const [orders, setOrders] = usePersistentState<Order[]>(
@@ -42,7 +49,7 @@ export default function OrdersPage() {
     requestedInstallTime: "",
     sinkType: "언더싱크볼" as SinkType,
     notes: "",
-    price: 350000,
+    price: FALLBACK_PRICE,
   });
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -52,14 +59,21 @@ export default function OrdersPage() {
       ? orders
       : orders.filter((o) => o.status === filterStatus);
 
-  const statusTabs: (OrderStatus | "전체")[] = [
-    "전체",
-    "접수",
-    "배정완료",
-    "시공중",
-    "완료",
-    "취소",
-  ];
+  const availableStatuses = useMemo(
+    () =>
+      Array.from(
+        new Set<OrderStatus>([
+          ...DEFAULT_ORDER_STATUSES,
+          ...orders.map((o) => o.status).filter(Boolean),
+        ]),
+      ),
+    [orders],
+  );
+
+  const statusTabs = useMemo<(OrderStatus | "전체")[]>(
+    () => ["전체", ...availableStatuses],
+    [availableStatuses],
+  );
 
   const todoStats = useMemo(() => {
     const unassigned = orders.filter(
@@ -79,6 +93,16 @@ export default function OrdersPage() {
 
     return { unassigned, unscheduled, waitingStart, inProgress };
   }, [orders, todayStr]);
+
+  const unpaidCount = useMemo(
+    () => orders.filter((o) => !(o.isDepositPaid ?? false) && o.status !== "취소").length,
+    [orders],
+  );
+
+  const matchedProduct = useMemo(
+    () => findProductByName(newOrder.productName),
+    [newOrder.productName],
+  );
 
   /* ── 대화 텍스트 → AI 파싱 → 주문 폼 자동 채우기 ── */
   async function handleParseText() {
@@ -124,7 +148,7 @@ export default function OrdersPage() {
         requestedInstallTime: d.requestedInstallTime || "",
         sinkType: validSink,
         notes: d.notes || "",
-        price: Number(d.price) || 350000,
+        price: Number(d.price) || FALLBACK_PRICE,
       });
 
       setShowParseModal(false);
@@ -135,6 +159,15 @@ export default function OrdersPage() {
     } finally {
       setParsing(false);
     }
+  }
+
+  function handleProductNameChange(productName: string) {
+    const found = findProductByName(productName);
+    setNewOrder((prev) => ({
+      ...prev,
+      productName,
+      price: found ? found.price : productName.trim() ? prev.price : FALLBACK_PRICE,
+    }));
   }
 
   function handleAddOrder() {
@@ -158,6 +191,7 @@ export default function OrdersPage() {
     const order: Order = {
       id: `ORD-2026-${String(orders.length + 1).padStart(3, "0")}`,
       ...newOrder,
+      isDepositPaid: false,
       status: "접수",
       requestDate: todayStr,
       requestedInstallDate: newOrder.requestedInstallDate || null,
@@ -179,7 +213,7 @@ export default function OrdersPage() {
       requestedInstallTime: "",
       sinkType: "언더싱크볼",
       notes: "",
-      price: 350000,
+      price: FALLBACK_PRICE,
     });
   }
 
@@ -227,9 +261,22 @@ export default function OrdersPage() {
         return {
           ...o,
           status,
-          completedDate: status === "완료" ? todayStr : o.completedDate,
+          completedDate: status === "완료" ? todayStr : null,
         };
       }),
+    );
+  }
+
+  function handleToggleDeposit(orderId: string) {
+    setOrders(
+      orders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              isDepositPaid: !(o.isDepositPaid ?? false),
+            }
+          : o,
+      ),
     );
   }
 
@@ -237,7 +284,7 @@ export default function OrdersPage() {
     setOrders(
       orders.map((o) =>
         o.status === "배정완료" && o.scheduledDate === todayStr
-          ? { ...o, status: "시공중" as OrderStatus }
+          ? { ...o, status: "시공중" }
           : o,
       ),
     );
@@ -247,7 +294,7 @@ export default function OrdersPage() {
     setOrders(
       orders.map((o) =>
         o.status === "시공중"
-          ? { ...o, status: "완료" as OrderStatus, completedDate: todayStr }
+          ? { ...o, status: "완료", completedDate: todayStr }
           : o,
       ),
     );
@@ -260,7 +307,7 @@ export default function OrdersPage() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">주문 관리</h2>
             <p className="text-[var(--color-text-muted)] text-sm mt-1">
-              총 {orders.length}건 · 오늘 접수 {orders.filter((o) => o.requestDate === todayStr).length}건
+              총 {orders.length}건 · 오늘 접수 {orders.filter((o) => o.requestDate === todayStr).length}건 · 입금 미확인 {unpaidCount}건
             </p>
           </div>
           <div className="flex gap-2">
@@ -359,11 +406,12 @@ export default function OrdersPage() {
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">주문번호</th>
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">고객</th>
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">주소</th>
-              <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">싱크볼</th>
+              <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">제품/타입</th>
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">담당기사</th>
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">시공일</th>
               <th className="text-left px-5 py-3.5 font-medium text-xs uppercase tracking-wide">상태</th>
               <th className="text-right px-5 py-3.5 font-medium text-xs uppercase tracking-wide">금액</th>
+              <th className="text-center px-5 py-3.5 font-medium text-xs uppercase tracking-wide">입금</th>
               <th className="text-center px-5 py-3.5 font-medium text-xs uppercase tracking-wide">액션</th>
             </tr>
           </thead>
@@ -390,7 +438,12 @@ export default function OrdersPage() {
                   {order.address}
                 </td>
                 <td className="px-5 py-3.5">
-                  <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-md">{order.sinkType}</span>
+                  <p className="text-xs font-medium">{order.productName?.trim() || order.sinkType}</p>
+                  {order.productName?.trim() && (
+                    <span className="text-[11px] bg-slate-100 px-2 py-0.5 rounded-md inline-block mt-1">
+                      {order.sinkType}
+                    </span>
+                  )}
                 </td>
                 <td className="px-5 py-3.5">
                   {order.status === "완료" || order.status === "취소" ? (
@@ -427,9 +480,47 @@ export default function OrdersPage() {
                   )}
                 </td>
                 <td className="px-5 py-3.5">
-                  <StatusBadge status={order.status} />
+                  <div className="space-y-1.5">
+                    <input
+                      list={`status-options-${order.id}`}
+                      className="w-full min-w-[120px] text-xs border border-[var(--color-border)] rounded-lg px-2 py-1.5 bg-white transition-colors hover:border-blue-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-none"
+                      value={order.status}
+                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                    />
+                    <datalist id={`status-options-${order.id}`}>
+                      {availableStatuses.map((status) => (
+                        <option key={status} value={status} />
+                      ))}
+                    </datalist>
+                    <StatusBadge status={order.status} />
+                  </div>
                 </td>
                 <td className="px-5 py-3.5 text-right font-medium">{order.price.toLocaleString()}원</td>
+                <td className="px-5 py-3.5 text-center">
+                  <div className="flex flex-col items-center gap-1.5">
+                    {order.isDepositPaid ? (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        입금완료
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        미확인
+                      </span>
+                    )}
+                    {order.status !== "취소" && (
+                      <button
+                        onClick={() => handleToggleDeposit(order.id)}
+                        className={`text-[11px] px-2.5 py-1 rounded-md font-medium transition-colors ${
+                          order.isDepositPaid
+                            ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                      >
+                        {order.isDepositPaid ? "확인취소" : "입금확인"}
+                      </button>
+                    )}
+                  </div>
+                </td>
                 <td className="px-5 py-3.5 text-center">
                   {order.status === "접수" && (
                     <button
@@ -504,7 +595,7 @@ export default function OrdersPage() {
                   <p>
                     AI가 <strong>고객명, 연락처, 주소, 설치 요청일/시간, 싱크볼 타입, 가격</strong>을 자동으로 추출합니다.
                   </p>
-                  <p>제품명은 수기 입력으로 관리됩니다.</p>
+                  <p>제품명은 주문 등록창에서 엑셀 단가표 추천 목록으로 선택할 수 있습니다.</p>
                 </div>
               </div>
 
@@ -595,14 +686,27 @@ export default function OrdersPage() {
                 ))}
 
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">제품명 (수기 입력)</label>
+                  <label className="text-sm font-medium mb-1.5 block">제품명 (엑셀 단가표 반영)</label>
                   <input
                     type="text"
-                    placeholder="예: 백조 거니 9830 + 카시미어 G7"
+                    list="product-catalog-options"
+                    placeholder="예: 백조 콰이어트 860"
                     className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-[var(--color-border)] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-none"
                     value={newOrder.productName}
-                    onChange={(e) => setNewOrder({ ...newOrder, productName: e.target.value })}
+                    onChange={(e) => handleProductNameChange(e.target.value)}
                   />
+                  <datalist id="product-catalog-options">
+                    {PRODUCT_CATALOG.map((product) => (
+                      <option key={product.name} value={product.name}>
+                        {product.price.toLocaleString()}원
+                      </option>
+                    ))}
+                  </datalist>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1.5">
+                    {matchedProduct
+                      ? `단가 자동 반영: ${matchedProduct.price.toLocaleString()}원${matchedProduct.category ? ` · ${matchedProduct.category}` : ""}`
+                      : "단가표에 있는 제품명을 선택하면 시공 금액이 자동으로 입력됩니다."}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -719,7 +823,7 @@ export default function OrdersPage() {
                     requestedInstallTime: "",
                     sinkType: "언더싱크볼",
                     notes: "",
-                    price: 350000,
+                    price: FALLBACK_PRICE,
                   });
                 }}
                 className="px-4 py-2.5 text-sm border border-[var(--color-border)] rounded-xl hover:bg-white transition-colors font-medium"
