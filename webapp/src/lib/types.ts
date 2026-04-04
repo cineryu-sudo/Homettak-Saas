@@ -12,9 +12,12 @@ export interface Order {
   customerName: string;
   phone: string;
   address: string;
+  productName?: string;
   sinkType: SinkType;
   status: OrderStatus;
   requestDate: string;
+  requestedInstallDate?: string | null;
+  requestedInstallTime?: string | null;
   scheduledDate: string | null;
   completedDate: string | null;
   technicianId: string | null;

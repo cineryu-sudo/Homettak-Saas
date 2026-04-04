@@ -37,6 +37,9 @@ export default function OrdersPage() {
     customerName: "",
     phone: "",
     address: "",
+    productName: "",
+    requestedInstallDate: "",
+    requestedInstallTime: "",
     sinkType: "언더싱크볼" as SinkType,
     notes: "",
     price: 350000,
@@ -105,6 +108,8 @@ export default function OrdersPage() {
       if (d.customerName) filled.add("customerName");
       if (d.phone) filled.add("phone");
       if (d.address) filled.add("address");
+      if (d.requestedInstallDate) filled.add("requestedInstallDate");
+      if (d.requestedInstallTime) filled.add("requestedInstallTime");
       if (d.sinkType) filled.add("sinkType");
       if (d.notes) filled.add("notes");
       if (d.price && Number(d.price) > 0) filled.add("price");
@@ -114,6 +119,9 @@ export default function OrdersPage() {
         customerName: d.customerName || "",
         phone: d.phone || "",
         address: d.address || "",
+        productName: "",
+        requestedInstallDate: d.requestedInstallDate || "",
+        requestedInstallTime: d.requestedInstallTime || "",
         sinkType: validSink,
         notes: d.notes || "",
         price: Number(d.price) || 350000,
@@ -130,14 +138,34 @@ export default function OrdersPage() {
   }
 
   function handleAddOrder() {
+    const requestMeta = [
+      newOrder.productName ? `제품: ${newOrder.productName}` : "",
+      newOrder.requestedInstallDate
+        ? `설치요청일: ${newOrder.requestedInstallDate}`
+        : "",
+      newOrder.requestedInstallTime
+        ? `설치요청시간: ${newOrder.requestedInstallTime}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+
+    const mergedNotes =
+      requestMeta && newOrder.notes
+        ? `${requestMeta}\n${newOrder.notes}`
+        : requestMeta || newOrder.notes;
+
     const order: Order = {
       id: `ORD-2026-${String(orders.length + 1).padStart(3, "0")}`,
       ...newOrder,
       status: "접수",
       requestDate: todayStr,
+      requestedInstallDate: newOrder.requestedInstallDate || null,
+      requestedInstallTime: newOrder.requestedInstallTime || null,
       scheduledDate: null,
       completedDate: null,
       technicianId: null,
+      notes: mergedNotes,
     };
     setOrders([order, ...orders]);
     setShowModal(false);
@@ -146,6 +174,9 @@ export default function OrdersPage() {
       customerName: "",
       phone: "",
       address: "",
+      productName: "",
+      requestedInstallDate: "",
+      requestedInstallTime: "",
       sinkType: "언더싱크볼",
       notes: "",
       price: 350000,
@@ -471,8 +502,9 @@ export default function OrdersPage() {
                 <div className="text-xs text-[var(--color-text-muted)] space-y-1">
                   <p>카카오톡, 문자, 전화 받은 내용을 그대로 붙여넣으세요.</p>
                   <p>
-                    AI가 <strong>고객명, 연락처, 주소, 싱크볼 타입, 가격</strong>을 자동으로 추출합니다.
+                    AI가 <strong>고객명, 연락처, 주소, 설치 요청일/시간, 싱크볼 타입, 가격</strong>을 자동으로 추출합니다.
                   </p>
+                  <p>제품명은 수기 입력으로 관리됩니다.</p>
                 </div>
               </div>
 
@@ -563,6 +595,56 @@ export default function OrdersPage() {
                 ))}
 
                 <div>
+                  <label className="text-sm font-medium mb-1.5 block">제품명 (수기 입력)</label>
+                  <input
+                    type="text"
+                    placeholder="예: 백조 거니 9830 + 카시미어 G7"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-[var(--color-border)] focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-none"
+                    value={newOrder.productName}
+                    onChange={(e) => setNewOrder({ ...newOrder, productName: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium mb-1.5">
+                      설치 요청일
+                      {aiFilledFields.has("requestedInstallDate") && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium">AI</span>
+                      )}
+                    </label>
+                    <input
+                      type="date"
+                      className={`w-full rounded-xl px-3.5 py-2.5 text-sm transition-all focus:outline-none focus:ring-2 ${
+                        aiFilledFields.has("requestedInstallDate")
+                          ? "border-2 border-emerald-300 bg-emerald-50/30 focus:ring-emerald-400"
+                          : "border border-[var(--color-border)] focus:ring-blue-400"
+                      }`}
+                      value={newOrder.requestedInstallDate}
+                      onChange={(e) => setNewOrder({ ...newOrder, requestedInstallDate: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium mb-1.5">
+                      설치 요청시간
+                      {aiFilledFields.has("requestedInstallTime") && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium">AI</span>
+                      )}
+                    </label>
+                    <input
+                      type="time"
+                      className={`w-full rounded-xl px-3.5 py-2.5 text-sm transition-all focus:outline-none focus:ring-2 ${
+                        aiFilledFields.has("requestedInstallTime")
+                          ? "border-2 border-emerald-300 bg-emerald-50/30 focus:ring-emerald-400"
+                          : "border border-[var(--color-border)] focus:ring-blue-400"
+                      }`}
+                      value={newOrder.requestedInstallTime}
+                      onChange={(e) => setNewOrder({ ...newOrder, requestedInstallTime: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div>
                   <label className="flex items-center gap-2 text-sm font-medium mb-1.5">
                     싱크볼 타입
                     {aiFilledFields.has("sinkType") && (
@@ -632,6 +714,9 @@ export default function OrdersPage() {
                     customerName: "",
                     phone: "",
                     address: "",
+                    productName: "",
+                    requestedInstallDate: "",
+                    requestedInstallTime: "",
                     sinkType: "언더싱크볼",
                     notes: "",
                     price: 350000,
